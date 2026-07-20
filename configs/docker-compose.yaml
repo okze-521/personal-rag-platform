@@ -1,0 +1,37 @@
+# Docker Compose — Personal RAG Platform 基础设施编排
+# 启动: docker compose -f configs/docker-compose.yaml up -d
+
+services:
+  # ── 向量数据库 ──────────────────────────────────
+  qdrant:
+    image: qdrant/qdrant:v1.9.0
+    container_name: rag_qdrant
+    ports:
+      - "6333:6333"   # REST API
+      - "6334:6334"   # gRPC (内部通信)
+    volumes:
+      - ../data/qdrant_storage:/qdrant/storage   # 持久化向量索引
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ── Embedding 模型服务 (笔记本端) ──────────────
+  ollama-embedder:
+    image: ollama/ollama:latest
+    container_name: rag_ollama_embedder
+    ports:
+      - "11435:11434"  # 笔记本独立端口，避免与台式机冲突
+    volumes:
+      - ../data/ollama_models:/root/.ollama/models
+    environment:
+      - OLLAMA_HOST=0.0.0.0:11434
+    restart: unless-stopped
+    # 首次启动后需手动 pull 模型:
+    #   docker exec rag_ollama_embedder ollama pull bge-m3
+
+volumes:
+  qdrant_storage:
+  ollama_models:

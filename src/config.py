@@ -41,7 +41,9 @@ class Settings(BaseSettings):
     EMBEDDING_DIM: int = 1024
 
     # ── 推理算力池 (台式机 Ollama) ────────────────
-    INFERENCE_HOST: str = "192.168.3.200"
+    # ⚠️ SECURITY: 严禁在源码中填写真实内网/公网IP！
+    # 必须通过本地 .env 文件或环境变量注入。此处仅供本地开发回退使用。
+    INFERENCE_HOST: str = "127.0.0.1"
     INFERENCE_PORT: int = 11434
     MODEL_NAME: str = "qwen3.6:35b-a3b-q4_K_M"
 
@@ -49,6 +51,11 @@ class Settings(BaseSettings):
     CONTEXT_SIZE: int = 8192
     GENERATION_TIMEOUT: int = 60
     RETRIES: int = 3
+
+    # ── Reranker 重排序 ────────────────────────────
+    RERANKER_MODEL: str = "BAAI/bge-reranker-v2-m3"
+    RETRIEVAL_K: int = 10     # 向量检索取回数量（多取几条给 Reranker 挑）
+    RERANK_TOP_K: int = 3     # Reranker 最终保留数量（送 LLM 的最相关文档）
 
     # ── CORS ──────────────────────────────────────
     CORS_ORIGINS: str = "*"

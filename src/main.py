@@ -25,6 +25,7 @@ if ENV_FILE.exists():
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from src.config import settings
 from src.models import QueryRequest, QueryResponse, HealthResponse
@@ -47,6 +48,12 @@ app.add_middleware(
 
 # ── 路由 ───────────────────────────────────────
 
+@app.get("/", include_in_schema=False)
+async def root():
+    """聊天页面"""
+    return FileResponse(str(ROOT / "chat.html"))
+
+
 @app.get("/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
     """存活探针"""
@@ -60,7 +67,7 @@ async def query(body: QueryRequest) -> QueryResponse:
         from src.rag_chain import get_rag_chain
 
         chain = await get_rag_chain()
-        result = await chain.ainvoke({"input": body.query})
+        result = await chain.ainvoke({"input": body.query, "top_k": body.top_k})
 
         return QueryResponse(
             original_query=body.query,

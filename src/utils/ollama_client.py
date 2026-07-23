@@ -1,13 +1,13 @@
 """
 LLM 客户端 — 推理请求封装 (本地 Ollama / 云端 Fallback)
+v2.0: 改造为 httpx 异步，不再阻塞事件循环
 """
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any
 
-import requests
+import httpx
 
 from src.config import settings
 
@@ -20,11 +20,11 @@ CLOUD_LLM_URL = "https://api.deepseek.com/v1/chat/completions"
 
 class LLMClient:
     """
-    LLM 推理客户端 — 本地优先，云端降级
+    LLM 推理客户端 — 本地优先，云端降级 (async)
 
     使用方式:
         client = LLMClient()
-        answer = client.generate(prompt="你好，请解释一下RAG")
+        answer = await client.agenerate(prompt="你好，请解释一下RAG")
     """
 
     def __init__(
@@ -38,18 +38,18 @@ class LLMClient:
         self.cloud_api_key = cloud_api_key or DEEPSEEK_API_KEY
         self.timeout_local = settings.GENERATION_TIMEOUT
 
-    def _try_local(self, prompt: str) -> str | None:
-        """尝试调用本地台式机 Ollama"""
+    async def _try_local(self, prompt: str) -> str | None:
+        """尝试调用本地台式机 Ollama (async)"""
         try:
-            resp = requests.post(
-                self.local_url,
-                json={
-                    "model": self.local_model,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "stream": False,
-                },
-                timeout=self.timeout_local,
-            )
+            async with httpx.AsyncClient(timeout=self.timeout_local) as client:
+                resp = await client.post(
+                    self.local_url,
+                    json={
+                        "model": self.local_model,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "stream": False,
+                    },
+                )
             resp.raise_for_status()
             content = resp.json()["message"]["content"]
             logger.info(f"Local LLM success ({self.local_model})")
@@ -58,23 +58,23 @@ class LLMClient:
             logger.warning(f"Local LLM unavailable: {type(e).__name__}: {e}")
             return None
 
-    def _try_cloud(self, prompt: str) -> str | None:
-        """调用云端 DeepSeek API"""
+    async def _try_cloud(self, prompt: str) -> str | None:
+        """调用云端 DeepSeek API (async)"""
         if not self.cloud_api_key:
             logger.warning("No DEEPSEEK_API_KEY configured, skipping cloud fallback")
             return None
 
         try:
-            resp = requests.post(
-                CLOUD_LLM_URL,
-                headers={"Authorization": f"Bearer {self.cloud_api_key}"},
-                json={
-                    "model": "deepseek-chat",
-                    "messages": [{"role": "user", "content": prompt}],
-                    "stream": False,
-                },
-                timeout=60,
-            )
+            async with httpx.AsyncClient(timeout=60) as client:
+                resp = await client.post(
+                    CLOUD_LLM_URL,
+                    headers={"Authorization": f"Bearer {self.cloud_api_key}"},
+                    json={
+                        "model": "deepseek-chat",
+                        "messages": [{"role": "user", "content": prompt}],
+                        "stream": False,
+                    },
+                )
             resp.raise_for_status()
             content = resp.json()["choices"][0]["message"]["content"]
             logger.info("Cloud LLM success (deepseek-chat)")
@@ -83,20 +83,20 @@ class LLMClient:
             logger.error(f"Cloud LLM failed: {type(e).__name__}: {e}")
             return None
 
-    def generate(self, prompt: str) -> str:
+    async def agenerate(self, prompt: str) -> str:
         """
-        生成回答 — 本地优先，失败时自动降级到云端
+        生成回答 — 本地优先，失败时自动降级到云端 (async)
 
         Returns:
             LLM 生成的回答文本，失败时返回错误信息
         """
         # 步骤 1: 本地台式机 Ollama
-        result = self._try_local(prompt)
+        result = await self._try_local(prompt)
         if result:
             return result
 
         # 步骤 2: 云端 DeepSeek
-        result = self._try_cloud(prompt)
+        result = await self._try_cloud(prompt)
         if result:
             return result
 

@@ -48,6 +48,7 @@ class LLMClient:
                         "model": self.local_model,
                         "messages": [{"role": "user", "content": prompt}],
                         "stream": False,
+                        "options": {"num_ctx": 4096},   # 限制上下文窗口，防止KV Cache撑爆显存
                     },
                 )
             resp.raise_for_status()
